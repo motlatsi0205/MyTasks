@@ -1,0 +1,228 @@
+package com.example.mytasks
+
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.content.Context
+import android.content.SharedPreferences
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.View
+import android.view.ViewGroup
+import android.widget.*
+import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.textfield.TextInputEditText
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.*
+
+class MainActivity : AppCompatActivity() {
+
+    // Task data class with a helper to get a comparable timestamp
+    data class Task(val name: String, val date: String, val time: String) {
+        fun getTimestamp(): Long {
+            if (date.isEmpty() && time.isEmpty()) return Long.MAX_VALUE
+            
+            val calendar = Calendar.getInstance()
+            try {
+                if (date.isNotEmpty()) {
+                    val parts = date.split("/")
+                    calendar.set(Calendar.DAY_OF_MONTH, parts[0].toInt())
+                    calendar.set(Calendar.MONTH, parts[1].toInt() - 1)
+                    calendar.set(Calendar.YEAR, parts[2].toInt())
+                }
+                if (time.isNotEmpty()) {
+                    val parts = time.split(":")
+                    calendar.set(Calendar.HOUR_OF_DAY, parts[0].toInt())
+                    calendar.set(Calendar.MINUTE, parts[1].toInt())
+                } else {
+                    calendar.set(Calendar.HOUR_OF_DAY, 23)
+                    calendar.set(Calendar.MINUTE, 59)
+                }
+                calendar.set(Calendar.SECOND, 59)
+                calendar.set(Calendar.MILLISECOND, 999)
+                return calendar.timeInMillis
+            } catch (e: Exception) {
+                return Long.MAX_VALUE
+            }
+        }
+
+        fun toJsonObject(): JSONObject {
+            val json = JSONObject()
+            json.put("name", name)
+            json.put("date", date)
+            json.put("time", time)
+            return json
+        }
+
+        companion object {
+            fun fromJsonObject(json: JSONObject): Task {
+                return Task(
+                    json.getString("name"),
+                    json.getString("date"),
+                    json.getString("time")
+                )
+            }
+        }
+    }
+
+    private lateinit var editTask: TextInputEditText
+    private lateinit var editDate: TextInputEditText
+    private lateinit var editTime: TextInputEditText
+    private lateinit var btnAdd: MaterialButton
+    private lateinit var listViewTasks: ListView
+    private lateinit var taskList: ArrayList<Task>
+    private lateinit var adapter: ArrayAdapter<Task>
+    private lateinit var sharedPreferences: SharedPreferences
+
+    private val checkHandler = Handler(Looper.getMainLooper())
+    private lateinit var checkRunnable: Runnable
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        sharedPreferences = getSharedPreferences("MyTasksPrefs", Context.MODE_PRIVATE)
+
+        editTask = findViewById(R.id.editTask)
+        editDate = findViewById(R.id.editDate)
+        editTime = findViewById(R.id.editTime)
+        btnAdd = findViewById(R.id.btnAdd)
+        listViewTasks = findViewById(R.id.listViewTasks)
+
+        editDate.setOnClickListener {
+            val calendar = Calendar.getInstance()
+            val year = calendar.get(Calendar.YEAR)
+            val month = calendar.get(Calendar.MONTH)
+            val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+            DatePickerDialog(this, { _, selectedYear, selectedMonth, selectedDay ->
+                val dateString = String.format(Locale.getDefault(), "%02d/%02d/%d", selectedDay, selectedMonth + 1, selectedYear)
+                editDate.setText(dateString)
+            }, year, month, day).show()
+        }
+
+        editTime.setOnClickListener {
+            val calendar = Calendar.getInstance()
+            val hour = calendar.get(Calendar.HOUR_OF_DAY)
+            val minute = calendar.get(Calendar.MINUTE)
+
+            TimePickerDialog(this, { _, selectedHour, selectedMinute ->
+                val timeString = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute)
+                editTime.setText(timeString)
+            }, hour, minute, true).show()
+        }
+
+        taskList = loadTasks()
+        adapter = object : ArrayAdapter<Task>(this, R.layout.task_item, taskList) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val view = convertView ?: layoutInflater.inflate(R.layout.task_item, parent, false)
+                val task = getItem(position)
+
+                val tvName = view.findViewById<TextView>(R.id.tvTaskName)
+                val tvDateTime = view.findViewById<TextView>(R.id.tvTaskDateTime)
+
+                tvName.text = task?.name
+                
+                val dateTimeInfo = buildString {
+                    if (task?.date?.isNotEmpty() == true) append("Date: ${task.date}")
+                    if (task?.time?.isNotEmpty() == true) {
+                        if (isNotEmpty()) append(" | ")
+                        append("Time: ${task.time}")
+                    }
+                    if (isEmpty()) append("No schedule set")
+                }
+                tvDateTime.text = dateTimeInfo
+                
+                return view
+            }
+        }
+        listViewTasks.adapter = adapter
+
+        btnAdd.setOnClickListener {
+            val taskName = editTask.text.toString().trim()
+            val taskDate = editDate.text.toString().trim()
+            val taskTime = editTime.text.toString().trim()
+
+            if (taskName.isNotEmpty()) {
+                val newTask = Task(taskName, taskDate, taskTime)
+                taskList.add(newTask)
+                taskList.sortBy { it.getTimestamp() }
+                saveTasks()
+                adapter.notifyDataSetChanged()
+                
+                editTask.text?.clear()
+                editDate.text?.clear()
+                editTime.text?.clear()
+                
+                Toast.makeText(this, "Task added!", Toast.LENGTH_SHORT).show()
+            } else {
+                editTask.error = "Please enter a task description"
+            }
+        }
+
+        listViewTasks.setOnItemClickListener { _, _, position, _ ->
+            taskList.removeAt(position)
+            saveTasks()
+            adapter.notifyDataSetChanged()
+            Toast.makeText(this, "Task Completed!", Toast.LENGTH_SHORT).show()
+        }
+
+        setupAutoRemoval()
+    }
+
+    private fun saveTasks() {
+        val jsonArray = JSONArray()
+        for (task in taskList) {
+            jsonArray.put(task.toJsonObject())
+        }
+        sharedPreferences.edit().putString("tasks", jsonArray.toString()).apply()
+    }
+
+    private fun loadTasks(): ArrayList<Task> {
+        val savedTasks = sharedPreferences.getString("tasks", null)
+        val list = ArrayList<Task>()
+        if (savedTasks != null) {
+            val jsonArray = JSONArray(savedTasks)
+            for (i in 0 until jsonArray.length()) {
+                list.add(Task.fromJsonObject(jsonArray.getJSONObject(i)))
+            }
+        }
+        return list
+    }
+
+    private fun setupAutoRemoval() {
+        checkRunnable = object : Runnable {
+            override fun run() {
+                val currentTime = System.currentTimeMillis()
+                val iterator = taskList.iterator()
+                var removedAny = false
+                
+                while (iterator.hasNext()) {
+                    val task = iterator.next()
+                    val taskTime = task.getTimestamp()
+                    
+                    if (taskTime != Long.MAX_VALUE && taskTime < currentTime) {
+                        iterator.remove()
+                        removedAny = true
+                    }
+                }
+
+                if (removedAny) {
+                    saveTasks()
+                    adapter.notifyDataSetChanged()
+                    Toast.makeText(this@MainActivity, "Expired tasks cleared", Toast.LENGTH_SHORT).show()
+                }
+
+                checkHandler.postDelayed(this, 10000)
+            }
+        }
+        checkHandler.post(checkRunnable)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        checkHandler.removeCallbacks(checkRunnable)
+    }
+}
