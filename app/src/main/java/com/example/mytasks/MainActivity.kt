@@ -1,10 +1,16 @@
 package com.example.mytasks
 
+import android.Manifest
+import android.app.AlarmManager
 import android.app.DatePickerDialog
+import android.app.PendingIntent
 import android.app.TimePickerDialog
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +18,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 import org.json.JSONArray
@@ -45,8 +53,8 @@ class MainActivity : AppCompatActivity() {
                     calendar.set(Calendar.HOUR_OF_DAY, 23)
                     calendar.set(Calendar.MINUTE, 59)
                 }
-                calendar.set(Calendar.SECOND, 59)
-                calendar.set(Calendar.MILLISECOND, 999)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
                 return calendar.timeInMillis
             } catch (e: Exception) {
                 return Long.MAX_VALUE
@@ -91,6 +99,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        checkNotificationPermission()
 
         sharedPreferences = getSharedPreferences("MyTasksPrefs", Context.MODE_PRIVATE)
 
@@ -158,17 +168,21 @@ class MainActivity : AppCompatActivity() {
                 saveTasks()
                 adapter.notifyDataSetChanged()
                 
+                // Schedule notification
+                scheduleNotification(newTask)
+
                 editTask.text?.clear()
                 editDate.text?.clear()
                 editTime.text?.clear()
                 rgPriority.check(R.id.rbLow)
-                Toast.makeText(this, "Task added!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Task added with reminder!", Toast.LENGTH_SHORT).show()
             } else {
                 editTask.error = "Description required"
             }
         }
 
         listViewTasks.setOnItemClickListener { _, _, position, _ ->
+            cancelNotification(taskList[position])
             taskList.removeAt(position)
             saveTasks()
             adapter.notifyDataSetChanged()
@@ -176,6 +190,41 @@ class MainActivity : AppCompatActivity() {
         }
 
         setupAutoRemoval()
+    }
+
+    private fun checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+    }
+
+    private fun scheduleNotification(task: Task) {
+        val intent = Intent(this, TaskReminderReceiver::class.java).apply {
+            putExtra("taskName", task.name)
+            putExtra("taskId", task.hashCode())
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, task.hashCode(), intent, 
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val time = task.getTimestamp()
+        
+        if (time != Long.MAX_VALUE && time > System.currentTimeMillis()) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pendingIntent)
+        }
+    }
+
+    private fun cancelNotification(task: Task) {
+        val intent = Intent(this, TaskReminderReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            this, task.hashCode(), intent, 
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(pendingIntent)
     }
 
     private fun saveTasks() {
