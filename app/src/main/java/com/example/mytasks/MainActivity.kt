@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.SharedPreferences
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -19,11 +20,15 @@ import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
-    // Task data class with a helper to get a comparable timestamp
-    data class Task(val name: String, val date: String, val time: String) {
+    enum class Priority(val color: Int) {
+        LOW(Color.parseColor("#4CAF50")),
+        MEDIUM(Color.parseColor("#FF9800")),
+        HIGH(Color.parseColor("#F44336"))
+    }
+
+    data class Task(val name: String, val date: String, val time: String, val priority: Priority = Priority.LOW) {
         fun getTimestamp(): Long {
             if (date.isEmpty() && time.isEmpty()) return Long.MAX_VALUE
-            
             val calendar = Calendar.getInstance()
             try {
                 if (date.isNotEmpty()) {
@@ -53,15 +58,18 @@ class MainActivity : AppCompatActivity() {
             json.put("name", name)
             json.put("date", date)
             json.put("time", time)
+            json.put("priority", priority.name)
             return json
         }
 
         companion object {
             fun fromJsonObject(json: JSONObject): Task {
+                val priorityName = if (json.has("priority")) json.getString("priority") else "LOW"
                 return Task(
                     json.getString("name"),
                     json.getString("date"),
-                    json.getString("time")
+                    json.getString("time"),
+                    Priority.valueOf(priorityName)
                 )
             }
         }
@@ -70,6 +78,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var editTask: TextInputEditText
     private lateinit var editDate: TextInputEditText
     private lateinit var editTime: TextInputEditText
+    private lateinit var rgPriority: RadioGroup
     private lateinit var btnAdd: MaterialButton
     private lateinit var listViewTasks: ListView
     private lateinit var taskList: ArrayList<Task>
@@ -88,65 +97,62 @@ class MainActivity : AppCompatActivity() {
         editTask = findViewById(R.id.editTask)
         editDate = findViewById(R.id.editDate)
         editTime = findViewById(R.id.editTime)
+        rgPriority = findViewById(R.id.rgPriority)
         btnAdd = findViewById(R.id.btnAdd)
         listViewTasks = findViewById(R.id.listViewTasks)
 
         editDate.setOnClickListener {
             val calendar = Calendar.getInstance()
-            val year = calendar.get(Calendar.YEAR)
-            val month = calendar.get(Calendar.MONTH)
-            val day = calendar.get(Calendar.DAY_OF_MONTH)
-
-            DatePickerDialog(this, { _, selectedYear, selectedMonth, selectedDay ->
-                val dateString = String.format(Locale.getDefault(), "%02d/%02d/%d", selectedDay, selectedMonth + 1, selectedYear)
+            DatePickerDialog(this, { _, year, month, day ->
+                val dateString = String.format(Locale.getDefault(), "%02d/%02d/%d", day, month + 1, year)
                 editDate.setText(dateString)
-            }, year, month, day).show()
+            }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
         }
 
         editTime.setOnClickListener {
             val calendar = Calendar.getInstance()
-            val hour = calendar.get(Calendar.HOUR_OF_DAY)
-            val minute = calendar.get(Calendar.MINUTE)
-
-            TimePickerDialog(this, { _, selectedHour, selectedMinute ->
-                val timeString = String.format(Locale.getDefault(), "%02d:%02d", selectedHour, selectedMinute)
+            TimePickerDialog(this, { _, hour, minute ->
+                val timeString = String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
                 editTime.setText(timeString)
-            }, hour, minute, true).show()
+            }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show()
         }
 
         taskList = loadTasks()
         adapter = object : ArrayAdapter<Task>(this, R.layout.task_item, taskList) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val view = convertView ?: layoutInflater.inflate(R.layout.task_item, parent, false)
-                val task = getItem(position)
+                val task = getItem(position)!!
 
                 val tvName = view.findViewById<TextView>(R.id.tvTaskName)
                 val tvDateTime = view.findViewById<TextView>(R.id.tvTaskDateTime)
+                val indicator = view.findViewById<View>(R.id.priorityIndicator)
 
-                tvName.text = task?.name
+                tvName.text = task.name
+                indicator.setBackgroundColor(task.priority.color)
                 
-                val dateTimeInfo = buildString {
-                    if (task?.date?.isNotEmpty() == true) append("Date: ${task.date}")
-                    if (task?.time?.isNotEmpty() == true) {
+                tvDateTime.text = buildString {
+                    if (task.date.isNotEmpty()) append("Date: ${task.date}")
+                    if (task.time.isNotEmpty()) {
                         if (isNotEmpty()) append(" | ")
                         append("Time: ${task.time}")
                     }
                     if (isEmpty()) append("No schedule set")
                 }
-                tvDateTime.text = dateTimeInfo
-                
                 return view
             }
         }
         listViewTasks.adapter = adapter
 
         btnAdd.setOnClickListener {
-            val taskName = editTask.text.toString().trim()
-            val taskDate = editDate.text.toString().trim()
-            val taskTime = editTime.text.toString().trim()
-
-            if (taskName.isNotEmpty()) {
-                val newTask = Task(taskName, taskDate, taskTime)
+            val name = editTask.text.toString().trim()
+            if (name.isNotEmpty()) {
+                val priority = when (rgPriority.checkedRadioButtonId) {
+                    R.id.rbMedium -> Priority.MEDIUM
+                    R.id.rbHigh -> Priority.HIGH
+                    else -> Priority.LOW
+                }
+                
+                val newTask = Task(name, editDate.text.toString(), editTime.text.toString(), priority)
                 taskList.add(newTask)
                 taskList.sortBy { it.getTimestamp() }
                 saveTasks()
@@ -155,10 +161,10 @@ class MainActivity : AppCompatActivity() {
                 editTask.text?.clear()
                 editDate.text?.clear()
                 editTime.text?.clear()
-                
+                rgPriority.check(R.id.rbLow)
                 Toast.makeText(this, "Task added!", Toast.LENGTH_SHORT).show()
             } else {
-                editTask.error = "Please enter a task description"
+                editTask.error = "Description required"
             }
         }
 
@@ -174,20 +180,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveTasks() {
         val jsonArray = JSONArray()
-        for (task in taskList) {
-            jsonArray.put(task.toJsonObject())
-        }
+        taskList.forEach { jsonArray.put(it.toJsonObject()) }
         sharedPreferences.edit().putString("tasks", jsonArray.toString()).apply()
     }
 
     private fun loadTasks(): ArrayList<Task> {
-        val savedTasks = sharedPreferences.getString("tasks", null)
+        val saved = sharedPreferences.getString("tasks", null) ?: return ArrayList()
         val list = ArrayList<Task>()
-        if (savedTasks != null) {
-            val jsonArray = JSONArray(savedTasks)
-            for (i in 0 until jsonArray.length()) {
-                list.add(Task.fromJsonObject(jsonArray.getJSONObject(i)))
-            }
+        val jsonArray = JSONArray(saved)
+        for (i in 0 until jsonArray.length()) {
+            list.add(Task.fromJsonObject(jsonArray.getJSONObject(i)))
         }
         return list
     }
@@ -196,25 +198,11 @@ class MainActivity : AppCompatActivity() {
         checkRunnable = object : Runnable {
             override fun run() {
                 val currentTime = System.currentTimeMillis()
-                val iterator = taskList.iterator()
-                var removedAny = false
-                
-                while (iterator.hasNext()) {
-                    val task = iterator.next()
-                    val taskTime = task.getTimestamp()
-                    
-                    if (taskTime != Long.MAX_VALUE && taskTime < currentTime) {
-                        iterator.remove()
-                        removedAny = true
-                    }
-                }
-
-                if (removedAny) {
+                if (taskList.removeAll { it.getTimestamp() != Long.MAX_VALUE && it.getTimestamp() < currentTime }) {
                     saveTasks()
                     adapter.notifyDataSetChanged()
                     Toast.makeText(this@MainActivity, "Expired tasks cleared", Toast.LENGTH_SHORT).show()
                 }
-
                 checkHandler.postDelayed(this, 10000)
             }
         }
