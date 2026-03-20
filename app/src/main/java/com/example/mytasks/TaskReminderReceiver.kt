@@ -18,23 +18,23 @@ class TaskReminderReceiver : BroadcastReceiver() {
         val taskName = intent.getStringExtra("taskName") ?: "Task Reminder"
         val taskId = intent.getIntExtra("taskId", 0)
 
-        val alarmSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        // Prioritize the device's default RINGTONE as requested for urgency
+        val ringtoneSound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
 
-        createNotificationChannel(context, alarmSound)
+        createNotificationChannel(context, ringtoneSound)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("ALARM: My Task")
+            .setContentTitle("URGENT: Task Reminder")
             .setContentText(taskName)
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setSound(alarmSound)
-            .setVibrate(longArrayOf(1000, 1000, 1000, 1000, 1000))
+            .setCategory(NotificationCompat.CATEGORY_CALL) // Using CALL category often makes it more bypass-ignore
+            .setSound(ringtoneSound)
+            .setVibrate(longArrayOf(1000, 500, 1000, 500, 1000))
             .setAutoCancel(true)
-            .setFullScreenIntent(null, true) // Helps it pop up even if locked
 
-        // This flag makes the sound repeat until the user interacts with the notification
+        // This makes the ringtone repeat until you dismiss it
         val notification = builder.build()
         notification.flags = notification.flags or Notification.FLAG_INSISTENT
 
@@ -49,29 +49,31 @@ class TaskReminderReceiver : BroadcastReceiver() {
 
     private fun createNotificationChannel(context: Context, soundUri: android.net.Uri) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Task Alarms"
-            val descriptionText = "Loud alarms for scheduled tasks"
+            val name = "Urgent Task Reminders"
+            val descriptionText = "Uses your ringtone for urgent task alerts"
             val importance = NotificationManager.IMPORTANCE_HIGH
             
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                .setUsage(AudioAttributes.USAGE_ALARM)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                 .build()
 
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
                 setSound(soundUri, audioAttributes)
                 enableVibration(true)
-                vibrationPattern = longArrayOf(1000, 1000, 1000, 1000, 1000)
             }
             
             val notificationManager: NotificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            
+            // Delete old channel if it exists to ensure new sound settings take effect
+            notificationManager.deleteNotificationChannel("task_alarm_channel")
             notificationManager.createNotificationChannel(channel)
         }
     }
 
     companion object {
-        const val CHANNEL_ID = "task_alarm_channel"
+        const val CHANNEL_ID = "task_urgent_channel"
     }
 }
