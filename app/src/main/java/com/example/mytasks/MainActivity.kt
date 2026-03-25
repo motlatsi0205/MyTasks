@@ -2,28 +2,19 @@ package com.example.mytasks
 
 import android.Manifest
 import android.app.AlarmManager
-import android.app.DatePickerDialog
 import android.app.PendingIntent
-import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.Settings
-import android.view.View
-import android.view.ViewGroup
-import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.TextInputEditText
-import org.json.JSONArray
+import androidx.fragment.app.Fragment
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import org.json.JSONObject
 import java.util.*
 
@@ -84,112 +75,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private lateinit var editTask: TextInputEditText
-    private lateinit var editDate: TextInputEditText
-    private lateinit var editTime: TextInputEditText
-    private lateinit var rgPriority: RadioGroup
-    private lateinit var btnAdd: MaterialButton
-    private lateinit var listViewTasks: ListView
-    private lateinit var taskList: ArrayList<Task>
-    private lateinit var adapter: ArrayAdapter<Task>
-    private lateinit var sharedPreferences: SharedPreferences
-
-    private val checkHandler = Handler(Looper.getMainLooper())
-    private lateinit var checkRunnable: Runnable
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
         checkPermissions()
 
-        sharedPreferences = getSharedPreferences("MyTasksPrefs", Context.MODE_PRIVATE)
+        val bottomNav = findViewById<BottomNavigationView>(R.id.bottom_navigation)
+        
+        // Default fragment
+        loadFragment(TasksFragment())
 
-        editTask = findViewById(R.id.editTask)
-        editDate = findViewById(R.id.editDate)
-        editTime = findViewById(R.id.editTime)
-        rgPriority = findViewById(R.id.rgPriority)
-        btnAdd = findViewById(R.id.btnAdd)
-        listViewTasks = findViewById(R.id.listViewTasks)
-
-        editDate.setOnClickListener {
-            val calendar = Calendar.getInstance()
-            DatePickerDialog(this, { _, year, month, day ->
-                val dateString = String.format(Locale.getDefault(), "%02d/%02d/%d", day, month + 1, year)
-                editDate.setText(dateString)
-            }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show()
-        }
-
-        editTime.setOnClickListener {
-            val calendar = Calendar.getInstance()
-            TimePickerDialog(this, { _, hour, minute ->
-                val timeString = String.format(Locale.getDefault(), "%02d:%02d", hour, minute)
-                editTime.setText(timeString)
-            }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show()
-        }
-
-        taskList = loadTasks()
-        adapter = object : ArrayAdapter<Task>(this, R.layout.task_item, taskList) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val view = convertView ?: layoutInflater.inflate(R.layout.task_item, parent, false)
-                val task = getItem(position)!!
-
-                val tvName = view.findViewById<TextView>(R.id.tvTaskName)
-                val tvDateTime = view.findViewById<TextView>(R.id.tvTaskDateTime)
-                val indicator = view.findViewById<View>(R.id.priorityIndicator)
-
-                tvName.text = task.name
-                indicator.setBackgroundColor(task.priority.color)
-                
-                tvDateTime.text = buildString {
-                    if (task.date.isNotEmpty()) append("Date: ${task.date}")
-                    if (task.time.isNotEmpty()) {
-                        if (isNotEmpty()) append(" | ")
-                        append("Time: ${task.time}")
-                    }
-                    if (isEmpty()) append("No schedule set")
-                }
-                return view
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_tasks -> loadFragment(TasksFragment())
+                R.id.nav_about -> loadFragment(AboutFragment())
             }
+            true
         }
-        listViewTasks.adapter = adapter
+    }
 
-        btnAdd.setOnClickListener {
-            val name = editTask.text.toString().trim()
-            if (name.isNotEmpty()) {
-                val priority = when (rgPriority.checkedRadioButtonId) {
-                    R.id.rbMedium -> Priority.MEDIUM
-                    R.id.rbHigh -> Priority.HIGH
-                    else -> Priority.LOW
-                }
-                
-                val newTask = Task(name, editDate.text.toString(), editTime.text.toString(), priority)
-                taskList.add(newTask)
-                taskList.sortBy { it.getTimestamp() }
-                saveTasks()
-                adapter.notifyDataSetChanged()
-                
-                scheduleNotification(newTask)
-
-                editTask.text?.clear()
-                editDate.text?.clear()
-                editTime.text?.clear()
-                rgPriority.check(R.id.rbLow)
-                Toast.makeText(this, "Task added with reminder!", Toast.LENGTH_SHORT).show()
-            } else {
-                editTask.error = "Description required"
-            }
-        }
-
-        listViewTasks.setOnItemClickListener { _, _, position, _ ->
-            cancelNotification(taskList[position])
-            taskList.removeAt(position)
-            saveTasks()
-            adapter.notifyDataSetChanged()
-            Toast.makeText(this, "Task Completed!", Toast.LENGTH_SHORT).show()
-        }
-
-        setupAutoRemoval()
+    private fun loadFragment(fragment: Fragment) {
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.fragment_container, fragment)
+            .commit()
     }
 
     private fun checkPermissions() {
@@ -198,28 +107,22 @@ class MainActivity : AppCompatActivity() {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
             }
         }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
             if (!alarmManager.canScheduleExactAlarms()) {
-                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
-                startActivity(intent)
+                startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM))
             }
         }
     }
 
-    private fun scheduleNotification(task: Task) {
+    fun scheduleNotification(task: Task) {
         val intent = Intent(this, TaskReminderReceiver::class.java).apply {
             putExtra("taskName", task.name)
             putExtra("taskId", task.hashCode())
         }
-        val pendingIntent = PendingIntent.getBroadcast(
-            this, task.hashCode(), intent, 
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val pendingIntent = PendingIntent.getBroadcast(this, task.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val time = task.getTimestamp()
-        
         if (time != Long.MAX_VALUE && time > System.currentTimeMillis()) {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -237,49 +140,10 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun cancelNotification(task: Task) {
+    fun cancelNotification(task: Task) {
         val intent = Intent(this, TaskReminderReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            this, task.hashCode(), intent, 
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val pendingIntent = PendingIntent.getBroadcast(this, task.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmManager.cancel(pendingIntent)
-    }
-
-    private fun saveTasks() {
-        val jsonArray = JSONArray()
-        taskList.forEach { jsonArray.put(it.toJsonObject()) }
-        sharedPreferences.edit().putString("tasks", jsonArray.toString()).apply()
-    }
-
-    private fun loadTasks(): ArrayList<Task> {
-        val saved = sharedPreferences.getString("tasks", null) ?: return ArrayList()
-        val list = ArrayList<Task>()
-        val jsonArray = JSONArray(saved)
-        for (i in 0 until jsonArray.length()) {
-            list.add(Task.fromJsonObject(jsonArray.getJSONObject(i)))
-        }
-        return list
-    }
-
-    private fun setupAutoRemoval() {
-        checkRunnable = object : Runnable {
-            override fun run() {
-                val currentTime = System.currentTimeMillis()
-                if (taskList.removeAll { it.getTimestamp() != Long.MAX_VALUE && it.getTimestamp() < currentTime }) {
-                    saveTasks()
-                    adapter.notifyDataSetChanged()
-                    Toast.makeText(this@MainActivity, "Expired tasks cleared", Toast.LENGTH_SHORT).show()
-                }
-                checkHandler.postDelayed(this, 10000)
-            }
-        }
-        checkHandler.post(checkRunnable)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        checkHandler.removeCallbacks(checkRunnable)
     }
 }
