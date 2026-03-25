@@ -89,6 +89,7 @@ class MainActivity : AppCompatActivity() {
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
                 R.id.nav_tasks -> loadFragment(TasksFragment())
+                R.id.nav_gallery -> loadFragment(GalleryFragment())
                 R.id.nav_about -> loadFragment(AboutFragment())
             }
             true
@@ -98,6 +99,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadFragment(fragment: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
+            .setReorderingAllowed(true)
             .commit()
     }
 
