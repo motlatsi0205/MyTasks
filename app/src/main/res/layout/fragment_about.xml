@@ -1,58 +1,108 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="24dp"
     android:background="#FAFAFA">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:layout_centerInParent="true">
+        android:padding="24dp"
+        android:gravity="center_horizontal">
 
-        <ImageView
-            android:layout_width="120dp"
-            android:layout_height="120dp"
-            android:src="@mipmap/ic_launcher_round" />
+        <!-- Profile Picture Section -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="150dp"
+            android:layout_height="150dp"
+            app:cardCornerRadius="75dp"
+            app:cardElevation="4dp"
+            android:layout_marginTop="20dp">
+
+            <ImageView
+                android:id="@+id/ivProfile"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_launcher_foreground"
+                android:background="#E0E0E0" />
+        </com.google.android.material.card.MaterialCardView>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="My Tasks"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="#212121"
-            android:layout_marginTop="16dp" />
+            android:text="Tap to change photo"
+            android:textSize="12sp"
+            android:textColor="#757575"
+            android:layout_marginTop="8dp" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Version 2.0"
-            android:textSize="16sp"
-            android:textColor="#757575" />
-
-        <TextView
+        <!-- Editable Information Section -->
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="This application helps you manage your daily schedule with ease. Features include priority setting, automatic sorting, persistent storage, and urgent alarms."
-            android:textSize="16sp"
-            android:textColor="#424242"
             android:layout_marginTop="32dp"
-            android:gravity="center"
-            android:lineSpacingExtra="4dp" />
+            android:hint="App Name">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etAppName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="My Tasks"
+                android:textStyle="bold"
+                android:textColor="#212121" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="Developer Name">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etDevName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Your Name"
+                android:textColor="#424242" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:hint="Description / Bio">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etBio"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="textMultiLine"
+                android:minLines="3"
+                android:gravity="top"
+                android:text="This application helps you manage your daily schedule with ease. Features include priority setting, automatic sorting, and urgent alarms."
+                android:textColor="#616161" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSaveAbout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Save My Profile"
+            app:cornerRadius="12dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Developed with ❤️"
+            android:textSize="14sp"
+            android:textColor="#9E9E9E"
+            android:layout_marginTop="32dp"
+            android:layout_marginBottom="24dp" />
 
     </LinearLayout>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Developed with ❤️ for the Assignment"
-        android:textSize="14sp"
-        android:textColor="#9E9E9E"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="24dp" />
-
-</RelativeLayout>
+</ScrollView>
