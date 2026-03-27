@@ -23,6 +23,7 @@ class TasksFragment : Fragment() {
     private lateinit var editTime: TextInputEditText
     private lateinit var rgPriority: RadioGroup
     private lateinit var btnAdd: MaterialButton
+    private lateinit var btnClearAll: MaterialButton
     private lateinit var listViewTasks: ListView
     private lateinit var taskList: ArrayList<MainActivity.Task>
     private lateinit var adapter: ArrayAdapter<MainActivity.Task>
@@ -42,6 +43,7 @@ class TasksFragment : Fragment() {
         editTime = view.findViewById(R.id.editTime)
         rgPriority = view.findViewById(R.id.rgPriority)
         btnAdd = view.findViewById(R.id.btnAdd)
+        btnClearAll = view.findViewById(R.id.btnClearAll)
         listViewTasks = view.findViewById(R.id.listViewTasks)
 
         setupPickers()
@@ -67,6 +69,16 @@ class TasksFragment : Fragment() {
                 editTime.text?.clear()
                 rgPriority.check(R.id.rbLow)
                 Toast.makeText(context, "Task Added", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnClearAll.setOnClickListener {
+            if (taskList.isNotEmpty()) {
+                taskList.forEach { (activity as? MainActivity)?.cancelNotification(it) }
+                taskList.clear()
+                saveTasks()
+                adapter.notifyDataSetChanged()
+                Toast.makeText(context, "All tasks cleared", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -143,7 +155,6 @@ class TasksFragment : Fragment() {
         checkRunnable = object : Runnable {
             override fun run() {
                 val currentTime = System.currentTimeMillis()
-                // Use the exact timestamp comparison we had before
                 val removedAny = taskList.removeAll { task ->
                     val taskTime = task.getTimestamp()
                     taskTime != Long.MAX_VALUE && taskTime < currentTime
@@ -180,7 +191,6 @@ class TasksFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        // Re-run auto-removal when coming back to the fragment
         checkHandler.post(checkRunnable)
     }
 
